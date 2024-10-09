@@ -21,10 +21,10 @@ class Res50Encoder(nn.Module):
         # using pretrained model's weights
         if pretrained_weights == 'COCO':
             self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/deeplabv3_resnet50_coco-cd0a2569.pth", map_location='cpu')  # pretrained on COCO
+                ".../checkpoints/deeplabv3_resnet50_coco-cd0a2569.pth", map_location='cpu')  # pretrained on COCO
         elif pretrained_weights == 'ImageNet':
             self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/resnet50-19c8e357.pth", map_location='cpu')  # pretrained on ImageNet
+                ".../checkpoints/resnet50-19c8e357.pth", map_location='cpu')  # pretrained on ImageNet
         else:
             self.pretrained_weights = pretrained_weights
 
@@ -88,84 +88,6 @@ class Res50Encoder(nn.Module):
                     new_dic[keys[i]] = self.pretrained_weights[keys[i]]
 
             self.load_state_dict(new_dic)
-
-"""
-For augmentation methods
-"""
-
-class Res50Encoder_(nn.Module):
-
-    """
-        Resnet50 backbone from deeplabv3
-        modify the 'downsample' component in layer2 and/or layer3 and/or layer4 as the vanilla Resnet
-        """
-
-    def __init__(self, replace_stride_with_dilation=None, pretrained_weights='resnet50'):
-        super().__init__()
-        # using pretrained model's weights
-        if pretrained_weights == 'deeplabv3':
-            self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/deeplabv3_resnet50_coco-cd0a2569.pth",
-                map_location='cpu')  # pretrained on COCO
-        elif pretrained_weights == 'resnet50':
-            self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/resnet50-19c8e357.pth",
-                map_location='cpu')  # pretrained on ImageNet
-        else:
-            self.pretrained_weights = pretrained_weights
-
-        _model = torchvision.models.resnet.resnet50(pretrained=False,
-                                                    replace_stride_with_dilation=replace_stride_with_dilation)
-        self.backbone = nn.ModuleDict()
-        for dic, m in _model.named_children():
-            self.backbone[dic] = m
-
-        self.rectification = nn.Conv2d(6, 3, kernel_size=1, bias=False)
-        self.reduce1 = nn.Conv2d(1024, 512, kernel_size=1, bias=False)
-        self.reduce2 = nn.Conv2d(2048, 512, kernel_size=1, bias=False)
-        self.reduce1d = nn.Linear(in_features=1000, out_features=1, bias=True)
-
-        self._init_weights()
-
-    def forward(self, x):
-
-        x = self.rectification(x)
-        x = self.backbone["conv1"](x)
-        x = self.backbone["bn1"](x)
-        x = self.backbone["relu"](x)
-
-        x = self.backbone["maxpool"](x)
-        x = self.backbone["layer1"](x)
-        x = self.backbone["layer2"](x)
-        x = self.backbone["layer3"](x)
-        feature = self.reduce1(x)  # (2, 512, 64, 64)
-        x = self.backbone["layer4"](x)
-        # feature map -> avgpool -> fc -> single value
-        t = self.backbone["avgpool"](x)
-        t = torch.flatten(t, 1)
-        t = self.backbone["fc"](t)
-        t = self.reduce1d(t)
-        return (feature, t)
-
-    def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-
-        if self.pretrained_weights is not None:
-            keys = list(self.pretrained_weights.keys())
-            new_dic = self.state_dict()
-            new_keys = list(new_dic.keys())
-
-            for i in range(len(keys)):
-                if keys[i] in new_keys:
-                    new_dic[keys[i]] = self.pretrained_weights[keys[i]]
-
-            self.load_state_dict(new_dic)
-
 
 """
 Pretrained Model: ResNet101
@@ -183,11 +105,11 @@ class Res101Encoder(nn.Module):
         # using pretrained model's weights
         if pretrained_weights == 'COCO':
             self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/deeplabv3_resnet101_coco-586e9e4e.pth",
+                ".../checkpoints/deeplabv3_resnet101_coco-586e9e4e.pth",
                 map_location='cpu')  # pretrained on COCO
         elif pretrained_weights == 'ImageNet':
             self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/resnet101-63fe2227.pth",
+                ".../checkpoints/resnet101-63fe2227.pth",
                 map_location='cpu')  # pretrained on ImageNet
         else:
             self.pretrained_weights = pretrained_weights
@@ -252,174 +174,4 @@ class Res101Encoder(nn.Module):
                     new_dic[keys[i]] = self.pretrained_weights[keys[i]]
 
             self.load_state_dict(new_dic)
-
-
-# frozen extractor  
-class Res50Encoder_frozenE(nn.Module):
-    """
-    Resnet50 backbone from deeplabv3
-    modify the 'downsample' component in layer2 and/or layer3 and/or layer4 as the vanilla Resnet
-    """
-
-    def __init__(self, replace_stride_with_dilation=None, pretrained_weights='resnet50'):
-        super().__init__()
-        # using pretrained model's weights
-        if pretrained_weights == 'COCO':
-            self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/deeplabv3_resnet50_coco-cd0a2569.pth", map_location='cpu')  # pretrained on COCO
-        elif pretrained_weights == 'ImageNet':
-            self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/resnet50-19c8e357.pth", map_location='cpu')  # pretrained on ImageNet
-        else:
-            self.pretrained_weights = pretrained_weights
-
-        _model = torchvision.models.resnet.resnet50(pretrained=False,
-                                                    replace_stride_with_dilation=replace_stride_with_dilation)
-        self.backbone = nn.ModuleDict()
-        for dic, m in _model.named_children():
-            self.backbone[dic] = m
-
-        self.reduce1 = nn.Conv2d(1024, 512, kernel_size=1, bias=False)
-        self.reduce2 = nn.Conv2d(2048, 512, kernel_size=1, bias=False)
-        self.reduce1d = nn.Linear(in_features=1000, out_features=1, bias=True)
-
-        self.IN_layer = nn.Sequential(
-            nn.InstanceNorm2d(512),
-            nn.ReLU(inplace=True)
-        )
-
-        self._init_weights()
-
-    def forward(self, x):
-
-        """
-        :param x:  (2, 3, 256, 256)
-        :return:
-        """
-        with torch.no_grad():
-            x = self.backbone["conv1"](x)
-            x = self.backbone["bn1"](x)
-            x = self.backbone["relu"](x)
-
-            x = self.backbone["maxpool"](x)
-            x = self.backbone["layer1"](x)
-            x = self.backbone["layer2"](x)
-            x = self.backbone["layer3"](x)
-            
-        feature = self.reduce1(x)  # (2, 512, 64, 64)
-        feature = self.IN_layer(feature)
-        
-        x = self.backbone["layer4"](x)
-        # feature map -> avgpool -> fc -> single value
-        t = self.backbone["avgpool"](x)
-        t = torch.flatten(t, 1)
-        t = self.backbone["fc"](t)
-        t = self.reduce1d(t)
-        return (feature, t)
-
-    def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-
-        if self.pretrained_weights is not None:
-            keys = list(self.pretrained_weights.keys())
-            new_dic = self.state_dict()
-            new_keys = list(new_dic.keys())
-
-            for i in range(len(keys)):
-                if keys[i] in new_keys:
-                    new_dic[keys[i]] = self.pretrained_weights[keys[i]]
-
-            self.load_state_dict(new_dic)
-
-
-# frozen extractor ResNet101
-class Res101Encoder_frozenE(nn.Module):
-    """
-        Resnet50 backbone pretrained on 'COCO' or 'imageNet'
-        modify the 'downsample' component in layer2 and/or layer3 and/or layer4 as the vanilla Resnet
-    """
-
-    def __init__(self, replace_stride_with_dilation=None, pretrained_weights='resnet101'):
-        super().__init__()
-        # using pretrained model's weights
-        if pretrained_weights == 'COCO':
-            self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/deeplabv3_resnet101_coco-586e9e4e.pth",
-                map_location='cpu')  # pretrained on COCO
-        elif pretrained_weights == 'ImageNet':
-            self.pretrained_weights = torch.load(
-                "/home/cs4007/data/zyz/CDFSMIS/checkpoints/resnet101-63fe2227.pth",
-                map_location='cpu')  # pretrained on ImageNet
-        else:
-            self.pretrained_weights = pretrained_weights
-
-        _model = torchvision.models.resnet.resnet50(pretrained=False,
-                                                    replace_stride_with_dilation=replace_stride_with_dilation)
-        self.backbone = nn.ModuleDict()
-        for dic, m in _model.named_children():
-            self.backbone[dic] = m
-
-        self.reduce1 = nn.Conv2d(1024, 512, kernel_size=1, bias=False)
-        self.reduce2 = nn.Conv2d(2048, 512, kernel_size=1, bias=False)
-        self.reduce1d = nn.Linear(in_features=1000, out_features=1, bias=True)
-
-        self.IN_layer = nn.Sequential(
-            nn.InstanceNorm2d(512),
-            nn.ReLU(inplace=True)
-        )
-
-        self._init_weights()
-
-    def forward(self, x):
-
-        """
-        :param x:  (2, 3, 256, 256)
-        :return:
-        """
-        with torch.no_grad():
-            x = F.interpolate(x, size=(256, 256), mode='bilinear', align_corners=False)
-            x = self.backbone["conv1"](x)
-            x = self.backbone["bn1"](x)
-            x = self.backbone["relu"](x)
-
-            x = self.backbone["maxpool"](x)
-            x = self.backbone["layer1"](x)
-            x = self.backbone["layer2"](x)
-            x = self.backbone["layer3"](x)
-
-        feature = self.reduce1(x)  # (2, 512, 64, 64)
-        feature = self.IN_layer(feature)
-        x = self.backbone["layer4"](x)
-        # feature map -> avgpool -> fc -> single value
-        t = self.backbone["avgpool"](x)
-        t = torch.flatten(t, 1)
-        t = self.backbone["fc"](t)
-        t = self.reduce1d(t)
-        return (feature, t)
-
-    def _init_weights(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-
-        if self.pretrained_weights is not None:
-            keys = list(self.pretrained_weights.keys())
-            new_dic = self.state_dict()
-            new_keys = list(new_dic.keys())
-
-            for i in range(len(keys)):
-                if keys[i] in new_keys:
-                    new_dic[keys[i]] = self.pretrained_weights[keys[i]]
-
-            self.load_state_dict(new_dic)
-
-    
 
