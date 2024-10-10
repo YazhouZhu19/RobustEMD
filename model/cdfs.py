@@ -1,6 +1,7 @@
 """
 encoder resnet50
 """
+from re import S
 import numpy as np
 import cv2
 import math
@@ -42,6 +43,11 @@ class FewShotSeg(nn.Module):
         self.channel = nn.Conv2d(in_channels=507, out_channels=512, kernel_size=1, stride=1)
 
         self.mse_loss = nn.MSELoss()
+
+        self.mlp = nn.Sequential(
+            nn.Linear(32, 32), 
+            nn.ReLU()
+        )
 
     def forward(self, supp_imgs, supp_mask, qry_imgs, qry_mask, opt, train=False):
 
@@ -92,6 +98,7 @@ class FewShotSeg(nn.Module):
         self.thresh_pred_ = [self.t_ for _ in range(self.n_ways)]
 
         outputs_qry = []
+        outputs_qry_coarse = []
         for epi in range(supp_bs):
 
             """
@@ -108,23 +115,26 @@ class FewShotSeg(nn.Module):
                                for shot in range(self.n_shots)] for way in range(self.n_ways)]
                 spt_bg_proto = self.getPrototype(supp_fts_b)
 
-                # PATNet's Transform Block
-                supp_fts = [
-                    [self.Transformation_Feature(supp_fts[[epi], way, shot], spt_fg_proto[way], spt_bg_proto[way])
-                     for shot in range(self.n_shots)] for way in range(self.n_ways)]  # [[(B, C, H, W)]]
-                qry_fts = [self.Transformation_Feature(qry_fts[epi], spt_fg_proto[way], spt_bg_proto[way])
-                           for way in range(self.n_ways)]  # [(B, C, H, W)]
+                # # PATNet's Transform Block
+                # supp_fts = [
+                #     [self.Transformation_Feature(supp_fts[[epi], way, shot], spt_fg_proto[way], spt_bg_proto[way])
+                #      for shot in range(self.n_shots)] for way in range(self.n_ways)]  # [[(B, C, H, W)]]
+                # qry_fts = [self.Transformation_Feature(qry_fts[epi], spt_fg_proto[way], spt_bg_proto[way])
+                #            for way in range(self.n_ways)]  # [(B, C, H, W)]
 
                 # obtain coarse mask of query *******************
                 qry_pred = torch.stack(
                     [self.getPred(qry_fts[way], spt_fg_proto[way], self.thresh_pred[way])
                      for way in range(self.n_ways)], dim=1)  # N x Wa x H' x W'
+
                 # Combine predictions of different feature maps #
                 qry_pred_coarse = F.interpolate(qry_pred, size=img_size, mode='bilinear', align_corners=True)
-
-                # ************************************************
-                # test the EMD for segmentation
-                # if qry_pred_coarse[0, 0, 0].max() > 0.:
+                
+                # the loss for coarse prediction 
+                if train:
+                    preds_coarse = torch.cat((1.0 - qry_pred_coarse, qry_pred_coarse), dim=1)
+                    outputs_qry_coarse.append(preds_coarse)
+            
 
                 proto_emd = [[self.EMD(supp_fts[way][shot], qry_fts[way], supp_imgs[way][shot], qry_imgs[way], supp_mask[[epi], way, shot], qry_pred_coarse[epi])
                       for shot in range(self.n_shots)] for way in range(self.n_ways)]
@@ -174,8 +184,10 @@ class FewShotSeg(nn.Module):
         output_qry = torch.stack(outputs_qry, dim=1)
         output_qry = output_qry.view(-1, *output_qry.shape[2:])
 
+        output_qry_coarse = torch.stack(outputs_qry_coarse, dim=1)
+        output_qry_coarse = output_qry_coarse.view(-1, *output_qry_coarse.shape[2:])
 
-        return output_qry
+        return output_qry, output_qry_coarse
 
     def getPred(self, fts, prototype, thresh):
         """
@@ -419,18 +431,19 @@ class FewShotSeg(nn.Module):
         qry_fts_fg = self.get_fg(qry_fts, qry_mask)  # (1, C, n2)
         # n1 and n2 are not fixed values
 
+
         foreground_size = 128
         num_stacks = 4
         stack_size = foreground_size / num_stacks  #
         num_dimension = spt_fts_fg.shape[1]   # C = num_node
 
-        # print(spt_fts_fg.size())
-
         num_node = num_dimension
 
         pool_opt = nn.AdaptiveAvgPool2d((num_dimension, foreground_size))
-        spt_fts_fg = pool_opt(spt_fts_fg.unsqueeze(0))  # (1, 1, C, m) / (1, 1, num_dimension, foreground_size)
-        qry_fts_fg = pool_opt(qry_fts_fg.unsqueeze(0))  # (1, 1, C, m) / (1, 1, num_dimension, foreground_size)
+
+        spt_fts_fg = pool_opt(spt_fts_fg.unsqueeze(0))  # (1, 1, C, m1) -> (1, 1, num_dimension, foreground_size)
+
+        qry_fts_fg = pool_opt(qry_fts_fg.unsqueeze(0))  # (1, 1, C, m2) -> (1, 1, num_dimension, foreground_size)
 
         spt_fts_fg, qry_fts_fg = spt_fts_fg.squeeze(0), qry_fts_fg.squeeze(0)   # (1, n_dimension, foreground_size) / (1, num_node, foreground_size)
         # make n_dimension = num_node
@@ -468,18 +481,32 @@ class FewShotSeg(nn.Module):
         score_normalized = (score - score_min) / (score_max - score_min)
 
         weights = torch.exp(- score_normalized)  # (1, num_stacks)
+
         resorted_spt_fts_list = [spt_fts_fg_split[i] * weights[0, i] for i in range(num_stacks)]
-        resorted_spt_fts = torch.cat(resorted_spt_fts_list, dim=-1)   # (1, 512, 256)
-        N = resorted_spt_fts.size(2)
-        spt_proto = torch.sum(resorted_spt_fts, dim=2) / (N + 1e-5)
+        # resorted_spt_fts = torch.cat(resorted_spt_fts_list, dim=-1)   # (1, 512, 128)
+        # N = resorted_spt_fts.size(2)
+        # spt_proto = torch.sum(resorted_spt_fts, dim=2) / (N + 1e-5)
 
         resorted_qry_fts_list = [qry_fts_fg_split[i] * weights[0, i] for i in range(num_stacks)]
-        resorted_qry_fts = torch.cat(resorted_qry_fts_list, dim=-1)   # (1, 512, 256)
-        M = resorted_qry_fts.size(2)
-        qry_proto = torch.sum(resorted_qry_fts, dim=2) / (M + 1e-5)
+        # resorted_qry_fts = torch.cat(resorted_qry_fts_list, dim=-1)   # (1, 512, 128)
+        # M = resorted_qry_fts.size(2)
+        # qry_proto = torch.sum(resorted_qry_fts, dim=2) / (M + 1e-5)
 
-        proto = spt_proto + qry_proto
+        # proto = spt_proto + qry_proto
 
+        elements = []
+        for i in range(num_stacks):
+            resorted_spt_element, resorted_qry_element = resorted_spt_fts_list[i], resorted_qry_fts_list[i]    # (1, C, N), (1, C, N)
+            resorted_spt_element, resorted_qry_element = resorted_spt_element.squeeze(0), resorted_qry_element.squeeze(0)  # (C, N), (C, N)
+            element_a = (self.mlp(resorted_spt_element) + self.mlp(resorted_qry_element)) * weights[0, i]
+            element_b = self.mlp((resorted_spt_element + resorted_qry_element) * weights[0, i])
+            element = self.mlp(element_a + element_b)
+            elements.append(element)
+        element = torch.cat(elements, dim=-1)
+        element = element.unsqueeze(0)   # (1, 512, 128)
+        L = element.size(2)
+        proto = torch.sum(element, dim=2) / (L + 1e-5)
+        
         return proto
 
     def get_similiarity_map(self, spt_fts_fg, qry_fts_fg):
