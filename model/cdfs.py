@@ -116,13 +116,6 @@ class FewShotSeg(nn.Module):
                                for shot in range(self.n_shots)] for way in range(self.n_ways)]
                 spt_bg_proto = self.getPrototype(supp_fts_b)
 
-                # # PATNet's Transform Block
-                # supp_fts = [
-                #     [self.Transformation_Feature(supp_fts[[epi], way, shot], spt_fg_proto[way], spt_bg_proto[way])
-                #      for shot in range(self.n_shots)] for way in range(self.n_ways)]  # [[(B, C, H, W)]]
-                # qry_fts = [self.Transformation_Feature(qry_fts[epi], spt_fg_proto[way], spt_bg_proto[way])
-                #            for way in range(self.n_ways)]  # [(B, C, H, W)]
-
                 # obtain coarse mask of query *******************
                 qry_pred = torch.stack(
                     [self.getPred(qry_fts[way], spt_fg_proto[way], self.thresh_pred[way])
@@ -299,11 +292,6 @@ class FewShotSeg(nn.Module):
         power_C = ((C * C).sum(dim=2, keepdim=True)).sqrt()
         C = C / (power_C + eps)
 
-        # C_norm = (C - torch.mean(C)) / torch.std(C)
-        # eps = 1e-5  # 微小扰动
-        # C_norm += eps
-        # P = torch.matmul(torch.pinverse(C_norm), R)
-
         P = torch.matmul(torch.pinverse(C), R)
         P = P.permute(0, 2, 1)
         init_size = feature.shape
@@ -313,24 +301,22 @@ class FewShotSeg(nn.Module):
         return transformed_fts
 
     def compute_gradients(self, tensor):
-        # 定义Sobel算子
+        # Sobel
         sobel_x = torch.tensor([[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]).view(1, 1, 3, 3)
         sobel_y = torch.tensor([[-1., -2., -1.], [0., 0., 0.], [1., 2., 1.]]).view(1, 1, 3, 3)
 
-        sobel_x = sobel_x.repeat(tensor.size(1), 1, 1, 1)  # 适应通道数
-        sobel_y = sobel_y.repeat(tensor.size(1), 1, 1, 1)  # 适应通道数
+        sobel_x = sobel_x.repeat(tensor.size(1), 1, 1, 1) 
+        sobel_y = sobel_y.repeat(tensor.size(1), 1, 1, 1) 
 
         if tensor.is_cuda:
             sobel_x = sobel_x.cuda()
             sobel_y = sobel_y.cuda()
 
-        # 卷积操作
         edge_x = F.conv2d(tensor, sobel_x, padding=1, groups=tensor.size(1))
         edge_y = F.conv2d(tensor, sobel_y, padding=1, groups=tensor.size(1))
         # edge_x = torch.sigmoid(edge_x)
         # edge_y = torch.sigmoid(edge_y)
 
-        # 计算梯度的大小
         gradient_magnitude = torch.sqrt(edge_x ** 2 + edge_y ** 2)
 
         return gradient_magnitude
@@ -373,24 +359,11 @@ class FewShotSeg(nn.Module):
         spt_fg = supp_imgs * spt_mask
         boundary_mask = self.Detection_head(spt_fg)
 
-        # boundary_mask = torch.round(boundary_mask)  # the boundary mask (1, 1, 256, 256)
-        # boundary_mask_np = boundary_mask.to('cpu').numpy()
-        # np.save('boundary.npy', boundary_mask_np)
-        # boundary_mask.to(self.device)
-
-        # spt_mask_np = spt_mask.to('cpu').numpy()
-        # np.save('spt_mask.npy', spt_mask_np)
-        # spt_mask.to(self.device)
-
         spt_fts_boundary_aware = boundary_mask * spt_fts  # (1, 512, 256, 256)
 
-        # content_mask = spt_mask - boundary_mask
-        # content_mask_np = content_mask.to('cpu').numpy()
-        # np.save('content_mask.npy', content_mask_np)
 
         gradinet_map = self.compute_gradients(spt_fts)  # (1, 512, 256, 256)
         gradient_map_fg = gradinet_map * spt_mask  # (1, 512, 256, 256)
-        # entropy_map = self.calculate_entropy(gradient_map_fg)
         local_variance_map = self.local_variance(gradient_map_fg)
 
         _, top_indices = torch.topk(local_variance_map, k=5)
@@ -409,7 +382,7 @@ class FewShotSeg(nn.Module):
         gradinet_map = self.compute_gradients(fts)  # (1, 512, 256, 256)
         gradient_map_fg = gradinet_map * mask  # (1, 512, 256, 256)
         local_variance_map = self.local_variance(gradient_map_fg)  # (1, 512)
-        # local_variance_map = torch.abs(local_variance_map)
+        
         # normalization
         weight = local_variance_map / local_variance_map.sum()
         # relu activation
@@ -483,16 +456,8 @@ class FewShotSeg(nn.Module):
         weights = torch.exp(- score_normalized)  # (1, num_stacks)
 
         resorted_spt_fts_list = [spt_fts_fg_split[i] * weights[0, i] for i in range(num_stacks)]
-        # resorted_spt_fts = torch.cat(resorted_spt_fts_list, dim=-1)   # (1, 512, 128)
-        # N = resorted_spt_fts.size(2)
-        # spt_proto = torch.sum(resorted_spt_fts, dim=2) / (N + 1e-5)
 
         resorted_qry_fts_list = [qry_fts_fg_split[i] * weights[0, i] for i in range(num_stacks)]
-        # resorted_qry_fts = torch.cat(resorted_qry_fts_list, dim=-1)   # (1, 512, 128)
-        # M = resorted_qry_fts.size(2)
-        # qry_proto = torch.sum(resorted_qry_fts, dim=2) / (M + 1e-5)
-
-        # proto = spt_proto + qry_proto
 
         elements = []
         for i in range(num_stacks):
