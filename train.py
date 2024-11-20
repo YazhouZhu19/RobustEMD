@@ -1,4 +1,3 @@
-# by Yazhou Zhu
 #!/usr/bin/env python
 import shutil
 
@@ -56,11 +55,8 @@ def main(_run, _config, _log):
 
     _log.info(f'Create model...')
     model_config = {
-        # 'data_dir': _config['path'][_config['dataset']]['data_dir'],
         'dataset': _config['dataset'],
         'PREC': _config['PREC'],
-        # 'train_classname': _config['train_classname'],
-        # 'test_classname': _config['test_classname'],
         'BACKBONE_NAME': _config['BACKBONE_NAME'],
         'N_CTX': _config['N_CTX'],
         'CTX_INIT': _config['CTX_INIT'],
@@ -70,7 +66,6 @@ def main(_run, _config, _log):
         'INIT_WEIGHTS': _config['INIT_WEIGHTS'],
         'OPTIM': _config['OPTIM'],
         'PROMPT_INIT': _config['PROMPT_INIT'],
-        # 'classnames': _config['classnames'],
     }
     model = FewShotSeg(model_config)
     model = model.cuda()
@@ -84,7 +79,6 @@ def main(_run, _config, _log):
 
     my_weight = torch.FloatTensor([0.1, 1.0]).cuda()
     criterion = nn.NLLLoss(ignore_index=255, weight=my_weight)
-    # criterion = nn.CrossEntropyLoss()
 
     _log.info(f'Load data...')
     data_config = {
@@ -178,7 +172,6 @@ def main(_run, _config, _log):
             i_iter += 1
 
     loss_values = np.array(loss_values)
-    # loss_values = loss_values.detach().cpu().numpy()
     np.savetxt('loss_values.txt', loss_values)
 
     _log.info('End of training.')
