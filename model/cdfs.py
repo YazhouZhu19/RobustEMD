@@ -69,7 +69,7 @@ class FewShotSeg(nn.Module):
         self.n_ways = len(supp_imgs)
         self.n_shots = len(supp_imgs[0])
         self.n_queries = len(qry_imgs)
-        assert self.n_ways == 1  # for now only one-way, because not every shot has multiple sub-images
+        assert self.n_ways == 1  
         assert self.n_queries == 1
 
         qry_bs = qry_imgs[0].shape[0]
@@ -77,7 +77,7 @@ class FewShotSeg(nn.Module):
         img_size = supp_imgs[0][0].shape[-2:]
 
         supp_mask = torch.stack([torch.stack(way, dim=0) for way in supp_mask],
-                                dim=0).view(supp_bs, self.n_ways, self.n_shots, *img_size)  # B x Wa x Sh x H x W
+                                dim=0).view(supp_bs, self.n_ways, self.n_shots, *img_size) 
 
         ## Feature Extracting With ResNet Backbone
         # Extract features #
@@ -86,16 +86,16 @@ class FewShotSeg(nn.Module):
 
         img_fts, tao = self.encoder(imgs_concat)
 
-        supp_fts = img_fts[:self.n_ways * self.n_shots * supp_bs].view(  # B x Wa x Sh x C x H' x W'
+        supp_fts = img_fts[:self.n_ways * self.n_shots * supp_bs].view( 
             supp_bs, self.n_ways, self.n_shots, -1, *img_fts.shape[-2:])
-        qry_fts = img_fts[self.n_ways * self.n_shots * supp_bs:].view(  # B x N x C x H' x W'
+        qry_fts = img_fts[self.n_ways * self.n_shots * supp_bs:].view(  
             qry_bs, self.n_queries, -1, *img_fts.shape[-2:])
 
         # Get threshold #
-        self.t = tao[self.n_ways * self.n_shots * supp_bs:]  # t for query features
+        self.t = tao[self.n_ways * self.n_shots * supp_bs:]  
         self.thresh_pred = [self.t for _ in range(self.n_ways)]
 
-        self.t_ = tao[:self.n_ways * self.n_shots * supp_bs]  # t for support features
+        self.t_ = tao[:self.n_ways * self.n_shots * supp_bs]  
         self.thresh_pred_ = [self.t_ for _ in range(self.n_ways)]
 
         outputs_qry = []
@@ -119,8 +119,8 @@ class FewShotSeg(nn.Module):
                 # obtain coarse mask of query *******************
                 qry_pred = torch.stack(
                     [self.getPred(qry_fts[way], spt_fg_proto[way], self.thresh_pred[way])
-                     for way in range(self.n_ways)], dim=1)  # N x Wa x H' x W'
-
+                     for way in range(self.n_ways)], dim=1)  
+                
                 # Combine predictions of different feature maps #
                 qry_pred_coarse = F.interpolate(qry_pred, size=img_size, mode='bilinear', align_corners=True)
 
@@ -140,10 +140,10 @@ class FewShotSeg(nn.Module):
                 qry_fts = [self.structure(qry_fts[way], qry_imgs[way], qry_pred_coarse) for way in range(self.n_ways)]
 
                 spt_fg_fts = [[self.get_fg(supp_fts[way][shot], supp_mask[[0], way, shot])
-                               for shot in range(self.n_shots)] for way in range(self.n_ways)]  # (1, 512, N_1)
+                               for shot in range(self.n_shots)] for way in range(self.n_ways)]  
 
                 qry_fg_fts = [self.get_fg(qry_fts[way], qry_pred_coarse[epi])
-                              for way in range(self.n_ways)]  # (1, 512, N_2), N_1 != N_2
+                              for way in range(self.n_ways)]  
 
                 spt_proto = [self.get_proto_new(spt_fg_fts[epi][way]) for way in range(self.n_ways)]
                 qry_proto = [self.get_proto_new(qry_fg_fts[way]) for way in range(self.n_ways)]
@@ -153,7 +153,7 @@ class FewShotSeg(nn.Module):
 
                 pred = torch.stack(
                     [self.getPred(qry_fts[way], fg_proto[way], self.thresh_pred[way])
-                     for way in range(self.n_ways)], dim=1)  # N x Wa x H' x W'
+                     for way in range(self.n_ways)], dim=1)  
                 pred_up = F.interpolate(pred, size=img_size, mode='bilinear', align_corners=True)
                 pred = torch.cat((1.0 - pred_up, pred_up), dim=1)
                 outputs_qry.append(pred)
@@ -162,11 +162,11 @@ class FewShotSeg(nn.Module):
                 ########################acquiesce prototypical network ################
                 supp_fts_ = [[self.getFeatures(supp_fts[[epi], way, shot], supp_mask[[epi], way, shot])
                               for shot in range(self.n_shots)] for way in range(self.n_ways)]
-                fg_prototypes = self.getPrototype(supp_fts_)  # the coarse foreground
+                fg_prototypes = self.getPrototype(supp_fts_) 
 
                 qry_pred = torch.stack(
                     [self.getPred(qry_fts[epi], fg_prototypes[way], self.thresh_pred[way])
-                     for way in range(self.n_ways)], dim=1)  # N x Wa x H' x W'
+                     for way in range(self.n_ways)], dim=1)  
                 ########################################################################
 
                 # Combine predictions of different feature maps #
@@ -212,7 +212,7 @@ class FewShotSeg(nn.Module):
 
         # masked fg features
         masked_fts = torch.sum(fts * mask[None, ...], dim=(-2, -1)) \
-                     / (mask[None, ...].sum(dim=(-2, -1)) + 1e-5)  # 1 x C
+                     / (mask[None, ...].sum(dim=(-2, -1)) + 1e-5) 
 
         return masked_fts
 
@@ -229,7 +229,7 @@ class FewShotSeg(nn.Module):
 
         n_ways, n_shots = len(fg_fts), len(fg_fts[0])
         fg_prototypes = [torch.sum(torch.cat([tr for tr in way], dim=0), dim=0, keepdim=True) / n_shots for way in
-                         fg_fts]  ## concat all fg_fts
+                         fg_fts]  
 
         return fg_prototypes
 
@@ -248,16 +248,16 @@ class FewShotSeg(nn.Module):
         result_list = []
 
         for batch_id in range(fts.shape[0]):
-            tmp_tensor = fts[batch_id]  # 获取当前批次
-            tmp_mask = mask[batch_id]  # 获取当前批次的屏蔽
+            tmp_tensor = fts[batch_id]  
+            tmp_mask = mask[batch_id]  
 
-            foreground_features = tmp_tensor[:, tmp_mask[0]]  # 提取前景特征
+            foreground_features = tmp_tensor[:, tmp_mask[0]]  
 
-            if foreground_features.shape[1] == 1:  # 如果前景特征数量为1
-                # 同样的特征复制一份
+            if foreground_features.shape[1] == 1:  
+              
                 foreground_features = torch.cat((foreground_features, foreground_features), dim=1)
 
-            result_list.append(foreground_features)  # 添加到结果列表
+            result_list.append(foreground_features)  
 
         foreground_features = torch.stack(result_list)
 
@@ -314,8 +314,6 @@ class FewShotSeg(nn.Module):
 
         edge_x = F.conv2d(tensor, sobel_x, padding=1, groups=tensor.size(1))
         edge_y = F.conv2d(tensor, sobel_y, padding=1, groups=tensor.size(1))
-        # edge_x = torch.sigmoid(edge_x)
-        # edge_y = torch.sigmoid(edge_y)
 
         gradient_magnitude = torch.sqrt(edge_x ** 2 + edge_y ** 2)
 
@@ -329,14 +327,13 @@ class FewShotSeg(nn.Module):
         :return: 每张图像的局部方差
         """
         N, C, H, W = images.size()
-        # 计算局部平均值
+
         mean = F.avg_pool2d(images, kernel_size, stride=1, padding=kernel_size // 2)
-        # 计算局部平方的平均值
+
         mean_of_square = F.avg_pool2d(images ** 2, kernel_size, stride=1, padding=kernel_size // 2)
-        # 计算局部方差
+
         local_var = mean_of_square - mean ** 2
 
-        # 对局部方差进行平均，得到每张图像的平均局部方差
         var_per_image = local_var.view(N, C, -1).mean(dim=2)
 
         return var_per_image
@@ -354,16 +351,15 @@ class FewShotSeg(nn.Module):
         """
 
         spt_fts = F.interpolate(spt_fts, size=supp_imgs.shape[-2:], mode='bilinear')
-        # qry_fts = F.interpolate(qry_fts, size=qry_imgs.shape[-2:], mode='bilinear')
 
         spt_fg = supp_imgs * spt_mask
         boundary_mask = self.Detection_head(spt_fg)
 
-        spt_fts_boundary_aware = boundary_mask * spt_fts  # (1, 512, 256, 256)
+        spt_fts_boundary_aware = boundary_mask * spt_fts  
 
 
-        gradinet_map = self.compute_gradients(spt_fts)  # (1, 512, 256, 256)
-        gradient_map_fg = gradinet_map * spt_mask  # (1, 512, 256, 256)
+        gradinet_map = self.compute_gradients(spt_fts) 
+        gradient_map_fg = gradinet_map * spt_mask 
         local_variance_map = self.local_variance(gradient_map_fg)
 
         _, top_indices = torch.topk(local_variance_map, k=5)
@@ -379,9 +375,9 @@ class FewShotSeg(nn.Module):
 
         fts = F.interpolate(fts, size=img.shape[-2:], mode='bilinear')
         # calculate gradient
-        gradinet_map = self.compute_gradients(fts)  # (1, 512, 256, 256)
-        gradient_map_fg = gradinet_map * mask  # (1, 512, 256, 256)
-        local_variance_map = self.local_variance(gradient_map_fg)  # (1, 512)
+        gradinet_map = self.compute_gradients(fts) 
+        gradient_map_fg = gradinet_map * mask 
+        local_variance_map = self.local_variance(gradient_map_fg)  
         
         # normalization
         weight = local_variance_map / local_variance_map.sum()
@@ -401,47 +397,42 @@ class FewShotSeg(nn.Module):
         :return:
         """
 
-        spt_fts_fg = self.get_fg(spt_fts, spt_mask)  # (1, C, n1)
-        qry_fts_fg = self.get_fg(qry_fts, qry_mask)  # (1, C, n2)
-        # n1 and n2 are not fixed values
+        spt_fts_fg = self.get_fg(spt_fts, spt_mask)  
+        qry_fts_fg = self.get_fg(qry_fts, qry_mask)  
 
         foreground_size = 128
         num_stacks = 4
-        stack_size = foreground_size / num_stacks  #
-        num_dimension = spt_fts_fg.shape[1]  # C = num_node
+        stack_size = foreground_size / num_stacks  
+        num_dimension = spt_fts_fg.shape[1]  
 
         num_node = num_dimension
 
         pool_opt = nn.AdaptiveAvgPool2d((num_dimension, foreground_size))
 
-        spt_fts_fg = pool_opt(spt_fts_fg.unsqueeze(0))  # (1, 1, C, m1) -> (1, 1, num_dimension, foreground_size)
+        spt_fts_fg = pool_opt(spt_fts_fg.unsqueeze(0))  
 
-        qry_fts_fg = pool_opt(qry_fts_fg.unsqueeze(0))  # (1, 1, C, m2) -> (1, 1, num_dimension, foreground_size)
+        qry_fts_fg = pool_opt(qry_fts_fg.unsqueeze(0))  
 
         spt_fts_fg, qry_fts_fg = spt_fts_fg.squeeze(0), qry_fts_fg.squeeze(
-            0)  # (1, n_dimension, foreground_size) / (1, num_node, foreground_size)
-        # make n_dimension = num_node
+            0)  
 
-        # spt_fts_fg, qry_fts_fg = spt_fts_fg.permute(0, 2, 1), qry_fts_fg.permute(0, 2, 1)
-        # (1, foreground_size, num_node)  (1, 256, 512)
-
-        weight_spt = self.structural_weight_map(spt_fts, spt_img, spt_mask)  # (1, num_node)  (1, 512)
-        weight_qry = self.structural_weight_map(qry_fts, qry_img, qry_mask)  # (1, num_node)  (1, 512)
+        weight_spt = self.structural_weight_map(spt_fts, spt_img, spt_mask) 
+        weight_qry = self.structural_weight_map(qry_fts, qry_img, qry_mask)  
 
         # split to stacks
-        spt_fts_fg_split = torch.chunk(spt_fts_fg, num_stacks, -1)  # (1, num_node, stack_size) * num_stacks
-        qry_fts_fg_split = torch.chunk(qry_fts_fg, num_stacks, -1)  # (1, num_node, stack_size) * num_stacks
+        spt_fts_fg_split = torch.chunk(spt_fts_fg, num_stacks, -1)  
+        qry_fts_fg_split = torch.chunk(qry_fts_fg, num_stacks, -1)  
 
         score_list = []
         for i, data in enumerate(spt_fts_fg_split):
-            spt_fts_fg_stack, qry_fts_fg_stack = spt_fts_fg_split[i], qry_fts_fg_split[i]  # (1, num_node, stack_size)
+            spt_fts_fg_stack, qry_fts_fg_stack = spt_fts_fg_split[i], qry_fts_fg_split[i]  
             spt_fts_fg_stack, qry_fts_fg_stack = spt_fts_fg_stack.permute(0, 2, 1), qry_fts_fg_stack.permute(0, 2, 1)
             # (1, stack_size, num_node)
 
-            similarity_map = self.get_similiarity_map(spt_fts_fg_stack, qry_fts_fg_stack)  # (1, 1, num_node, num_node)
+            similarity_map = self.get_similiarity_map(spt_fts_fg_stack, qry_fts_fg_stack)  
             # employ opencv's EMD
             _, flow = self.emd_inference_opencv(1 - similarity_map[0, 0, :, :], weight_spt[0],
-                                                weight_qry[0])  # time consuming step  obtain the optim flow with OpenCV
+                                                weight_qry[0])  
             similarity_map[0, 0, :, :] = (similarity_map[0, 0, :, :]) * torch.from_numpy(flow).cuda()
             temperature = (12.5 / num_dimension)
             score = similarity_map.sum(-1).sum(-1) * temperature
@@ -453,7 +444,7 @@ class FewShotSeg(nn.Module):
         score_min = torch.min(score)
         score_normalized = (score - score_min) / (score_max - score_min)
 
-        weights = torch.exp(- score_normalized)  # (1, num_stacks)
+        weights = torch.exp(- score_normalized)  
 
         resorted_spt_fts_list = [spt_fts_fg_split[i] * weights[0, i] for i in range(num_stacks)]
 
@@ -462,15 +453,15 @@ class FewShotSeg(nn.Module):
         elements = []
         for i in range(num_stacks):
             resorted_spt_element, resorted_qry_element = resorted_spt_fts_list[i], resorted_qry_fts_list[
-                i]  # (1, C, N), (1, C, N)
+                i]  
             resorted_spt_element, resorted_qry_element = resorted_spt_element.squeeze(0), resorted_qry_element.squeeze(
-                0)  # (C, N), (C, N)
+                0)  
             element_a = (self.mlp(resorted_spt_element) + self.mlp(resorted_qry_element)) * weights[0, i]
             element_b = self.mlp((resorted_spt_element + resorted_qry_element) * weights[0, i])
             element = self.mlp(element_a + element_b)
             elements.append(element)
         element = torch.cat(elements, dim=-1)
-        element = element.unsqueeze(0)  # (1, 512, 128)
+        element = element.unsqueeze(0)  
         L = element.size(2)
         proto = torch.sum(element, dim=2) / (L + 1e-5)
 
@@ -485,17 +476,17 @@ class FewShotSeg(nn.Module):
         """
 
         num_node = spt_fts_fg.shape[-1]
-        spt_fts_fg, qry_fts_fg = spt_fts_fg.unsqueeze(0), qry_fts_fg.unsqueeze(0)  # (1, 1, foreground_size, num_node)
+        spt_fts_fg, qry_fts_fg = spt_fts_fg.unsqueeze(0), qry_fts_fg.unsqueeze(0)  
 
-        spt_fts_fg = spt_fts_fg.permute(0, 1, 3, 2)  # (1, 1, num_node, foreground_size)  (1, 1, 512, 8)
-        qry_fts_fg = qry_fts_fg.permute(0, 1, 3, 2)  # (1, 1, num_node, foreground_size)  (1, 1, 512, 8)    hw/n = 8
+        spt_fts_fg = spt_fts_fg.permute(0, 1, 3, 2)  
+        qry_fts_fg = qry_fts_fg.permute(0, 1, 3, 2)  
 
-        feature_size = spt_fts_fg.shape[-2]  # num_node  512
-        spt_fts_fg = spt_fts_fg.unsqueeze(-3)  # (1, 1, 1, 512, 8)
-        qry_fts_fg = qry_fts_fg.unsqueeze(-2)  # (1, 1, 512, 1, 8)
-        qry_fts_fg = qry_fts_fg.repeat(1, 1, 1, feature_size, 1)  # (1, 1, 512, 512, 8)
+        feature_size = spt_fts_fg.shape[-2]  
+        spt_fts_fg = spt_fts_fg.unsqueeze(-3)  
+        qry_fts_fg = qry_fts_fg.unsqueeze(-2)  
+        qry_fts_fg = qry_fts_fg.repeat(1, 1, 1, feature_size, 1) 
         similarity_map = F.cosine_similarity(spt_fts_fg, qry_fts_fg,
-                                             dim=-1)  # (1, 1, num_node, num_node)  (1, 1, 512, 512)
+                                             dim=-1)  
 
         return similarity_map
 
