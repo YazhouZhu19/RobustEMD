@@ -129,9 +129,16 @@ class FewShotSeg(nn.Module):
                     preds_coarse = torch.cat((1.0 - qry_pred_coarse, qry_pred_coarse), dim=1)
                     outputs_qry_coarse.append(preds_coarse)
 
-                proto_emd = [[self.EMD(supp_fts[way][shot], qry_fts[way], supp_imgs[way][shot], qry_imgs[way],
+                if qry_pred_coarse[epi].max() > 0.:
+
+                    proto_emd = [[self.EMD(supp_fts[way][shot], qry_fts[way], supp_imgs[way][shot], qry_imgs[way],
                                        supp_mask[[epi], way, shot], qry_pred_coarse[epi])
                               for shot in range(self.n_shots)] for way in range(self.n_ways)]
+                else:
+                    proto_emd = [spt_fg_proto]
+                
+        
+
 
                 # structure aware transform
                 supp_fts = [[self.structure(supp_fts[way][shot], supp_imgs[way][shot], supp_mask[[epi], way, shot])
@@ -409,9 +416,9 @@ class FewShotSeg(nn.Module):
 
         pool_opt = nn.AdaptiveAvgPool2d((num_dimension, foreground_size))
 
-        spt_fts_fg = pool_opt(spt_fts_fg.unsqueeze(0))  
+        spt_fts_fg = pool_opt(spt_fts_fg.unsqueeze(0))
 
-        qry_fts_fg = pool_opt(qry_fts_fg.unsqueeze(0))  
+        qry_fts_fg = pool_opt(qry_fts_fg.unsqueeze(0))
 
         spt_fts_fg, qry_fts_fg = spt_fts_fg.squeeze(0), qry_fts_fg.squeeze(
             0)  
@@ -509,5 +516,4 @@ class FewShotSeg(nn.Module):
         cost, _, flow = cv2.EMD(weight1, weight2, cv2.DIST_USER, cost_matrix)
 
         return cost, flow
-
 
