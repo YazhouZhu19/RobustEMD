@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 
 from config import ex
 from dataloaders.datasets import TrainDataset as TrainDataset
-from models.cdfs import FewShotSeg
+from models.cdfs_emd import FewShotSeg
 from utils import *
 
 
@@ -127,12 +127,14 @@ def main(_run, _config, _log):
             query_labels = torch.cat([query_label.long().cuda() for query_label in sample['query_labels']], dim=0)
 
             # Compute outputs and losses.
-            query_pred  = model(support_images, support_fg_mask, query_images, query_labels, opt=optimizer, train=True)
+            query_pred, query_coarse  = model(support_images, support_fg_mask, query_images, query_labels, opt=optimizer, train=True)
 
             query_loss = criterion(torch.log(torch.clamp(query_pred, torch.finfo(torch.float32).eps,
                                                          1 - torch.finfo(torch.float32).eps)), query_labels)
+            query_loss_coarse = criterion(torch.log(torch.clamp(query_coarse, torch.finfo(torch.float32).eps,
+                                                         1 - torch.finfo(torch.float32).eps)), query_labels)
 
-            loss = query_loss
+            loss = query_loss + query_loss_coarse
 
             # Compute gradient and do SGD step.
             for param in model.parameters():
@@ -176,22 +178,6 @@ def main(_run, _config, _log):
 
     _log.info('End of training.')
     return 1
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
